@@ -14,6 +14,9 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	private static $instance = null;
 
 	const PNAME = 'FhoevEvent';
+	const CTYPE = 'Services';
+	const CNAME = 'EventHandling';
+	const SLOT_ID = 'evhk';
 
 	/**
 	 * Get singelton instance
@@ -30,7 +33,10 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		}
 		include_once './Services/Component/classes/class.ilPluginAdmin.php';
 		return self::$instance = ilPluginAdmin::getPluginObject(
-						self::CTYPE, self::CNAME, self::SLOT_ID, self::PNAME
+					self::CTYPE, 
+					self::CNAME, 
+					self::SLOT_ID, 
+					self::PNAME
 		);
 	}
 	
@@ -42,7 +48,17 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	 */
 	public function handleEvent($a_component, $a_event, $a_parameter)
 	{
-		if(!$this->isMainCourse($a_parameter))
+		if($a_component == 'Modules/Group' && $a_event == 'addParticipant')
+		{
+			return $this->handleGroupAssignMember($a_parameter);
+		}
+		if($a_component == 'Modules/Group' && $a_event == 'deleteParticipant')
+		{
+			return $this->handleGroupDeassignMember($a_parameter);
+		}
+
+		$ref_id = $this->lookupRefId($a_parameter['obj_id']);
+		if(!$this->isMainCourse($ref_id))
 		{
 			return;
 		}
@@ -54,14 +70,6 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		if($a_component == 'Modules/Course' && $a_event == 'deleteParticipant')
 		{
 			return $this->handleCourseDeassignMember($a_parameter);
-		}
-		if($a_component == 'Modules/Group' && $a_event == 'addParticipant')
-		{
-			return $this->handleGroupAssignMember($a_parameter);
-		}
-		if($a_component == 'Modules/Group' && $a_event == 'deleteParticipant')
-		{
-			return $this->handleGroupDeassignMember($a_parameter);
 		}
 	}
 	
@@ -135,6 +143,11 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 			$GLOBALS['ilLog']->write('No parent course found => nothing to do!');
 			return FALSE;
 		}
+		
+		if(!$this->isMainCourse($parent_course_ref))
+		{
+			return FALSE;
+		}
 
 		foreach($GLOBALS['rbacreview']->getRolesOfObject($parent_course_ref,TRUE) as $role_id)
 		{
@@ -158,8 +171,36 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	}
 	
 
-	protected function isMainCourse($a_parameter)
+	/**
+	 * check if course is of type main course
+	 * @param type $a_parameter
+	 * @return boolean
+	 */
+	protected function isMainCourse($a_course_ref_id)
 	{
+		if(!ilFhoevEventSettings::getInstance()->isActive())
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': Plugin deactivated');
+		}
+		$dtpl = ilFhoevEventSettings::getInstance()->getTemplateId();
+		if(!$dtpl)
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': No template id given');
+		}
+		
+		include_once './Services/DidacticTemplate/classes/class.ilDidacticTemplateObjSettings.php';
+		
+		$current_dtpl_id = ilDidacticTemplateObjSettings::lookupTemplateId($a_course_ref_id);
+		$GLOBALS['ilLog']->write(__METHOD__.': Current dtpl id is ' . $current_dtpl_id);
+		$GLOBALS['ilLog']->write(__METHOD__.': Current dtpl is ' . $dtpl);
+		$GLOBALS['ilLog']->write(__METHOD__.': Current ref_id ' . $a_course_ref_id);
+		if($current_dtpl_id != $dtpl)
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': Not main course');
+			return FALSE;
+		}
+		
+		$GLOBALS['ilLog']->write(__METHOD__.': ... is main course');
 		return TRUE;
 	}
 
