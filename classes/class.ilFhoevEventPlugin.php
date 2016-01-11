@@ -48,6 +48,8 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	 */
 	public function handleEvent($a_component, $a_event, $a_parameter)
 	{
+		$GLOBALS['ilLog']->write(__METHOD__.': '. $a_component.' '.$a_event);
+		
 		if($a_component == 'Modules/Group' && $a_event == 'addParticipant')
 		{
 			return $this->handleGroupAssignMember($a_parameter);
@@ -57,20 +59,93 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 			return $this->handleGroupDeassignMember($a_parameter);
 		}
 
-		$ref_id = $this->lookupRefId($a_parameter['obj_id']);
-		if(!$this->isMainCourse($ref_id))
-		{
-			return;
+		if(
+			$a_component == 'Modules/Course' &&
+			(($a_event == 'addParticipant') || ($a_event == 'deleteParticipant'))
+		)
+		{		
+			$ref_id = $this->lookupRefId($a_parameter['obj_id']);
+			if(!$this->isMainCourse($ref_id))
+			{
+				return;
+			}
+			if($a_component == 'Modules/Course' && $a_event == 'addParticipant')
+			{
+				return $this->handleCourseAssignMember($a_parameter);
+			}
+			if($a_component == 'Modules/Course' && $a_event == 'deleteParticipant')
+			{
+				return $this->handleCourseDeassignMember($a_parameter);
+			}
 		}
 		
-		if($a_component == 'Modules/Course' && $a_event == 'addParticipant')
+		if($a_component == 'Modules/Group' && $a_event == 'afterCreation')
 		{
-			return $this->handleCourseAssignMember($a_parameter);
+			$GLOBALS['ilLog']->write(__METHOD__.': Listening to event "afteCreation" for component Modules.');
+			$this->handleGroupCreation($a_parameter['ref_id'], $a_parameter['obj_id'], $a_parameter['obj_type']);
 		}
-		if($a_component == 'Modules/Course' && $a_event == 'deleteParticipant')
+	}
+	
+	/**
+	 * Handle group creation inside main course
+	 * @param type $a_obj_id
+	 */
+	protected function handleGroupCreation($a_node_ref_id, $a_node_obj_id, $a_node_obj_type)
+	{
+		if($a_node_obj_type != 'grp')
 		{
-			return $this->handleCourseDeassignMember($a_parameter);
+			$GLOBALS['ilLog']->write(__METHOD__.': New node not of type grp for ref_id ' . $a_node_ref_id);
+			return false;
 		}
+		
+		if(!$a_node_ref_id)
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': No ref_id given. Aborting!');
+			return false;
+		}
+		
+		$parent_id = $GLOBALS['tree']->getParentId($a_node_ref_id);
+		if(ilObject::_lookupType($parent_id, true) != 'crs')
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': Parent type is not of type "crs"');
+			return false;
+		}
+		if(!$this->isMainCourse($parent_id))
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': Parent course is not main course for group ref_id ' . $a_node_ref_id);
+			return false;
+		}
+		
+		// determine default group role
+		$group_role_id = 0;
+		foreach($GLOBALS['rbacreview']->getRolesOfObject($a_node_ref_id,TRUE) as $role_id)
+		{
+			$role_title = ilObject::_lookupTitle($role_id);
+			if(substr($role_title, 0, 8) == 'il_grp_m')
+			{
+				$group_role_id = $role_id;
+			}
+		}
+		
+		if(!$group_role_id)
+		{
+			$GLOBALS['ilLog']->write(__METHOD__.': Did not found default group member role for group obj_id ' . $a_node_obj_id);
+			return false;
+		}
+		
+		// now assign all members of the parent course to the new group
+		include_once './Modules/Course/classes/class.ilCourseParticipants.php';
+		$part = ilCourseParticipants::getInstanceByObjId(ilObject::_lookupObjectId($parent_id));
+		foreach($part->getMembers() as $member_id)
+		{
+			// do not assign user if he/she is admin or tutor
+			if($part->isAdmin($member_id) || $part->isTutor($member_id))
+			{
+				continue;
+			}
+			$GLOBALS['rbacadmin']->assignUser($group_role_id, $member_id);
+		}
+		return true;
 	}
 	
 	/**
