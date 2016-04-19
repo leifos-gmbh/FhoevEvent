@@ -48,7 +48,7 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	 */
 	public function handleEvent($a_component, $a_event, $a_parameter)
 	{
-		$GLOBALS['ilLog']->write(__METHOD__.': '. $a_component.' '.$a_event);
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Handling event: '. $a_component.' '. $a_event);
 		
 		if($a_component == 'Modules/Group' && $a_event == 'addParticipant')
 		{
@@ -154,19 +154,15 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 	 */
 	protected function handleCourseAssignMember($a_parameter)
 	{
-		$GLOBALS['ilLog']->write(__METHOD__.': Listening to event add participant from course!');
-		
 		// admin or tutor role => nothing to do
-		$GLOBALS['ilLog']->write(__METHOD__.': Handling role assignment to role: '. $a_parameter['role_id']);
-		
 		if($a_parameter['role_id'] == IL_CRS_ADMIN)
 		{
-			$GLOBALS['ilLog']->write(__METHOD__.': Nothing to do for course role admin');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('Nothing todo for course role admin');
 			return TRUE;
 		}
 		if($a_parameter['role_id'] == IL_CRS_TUTOR)
 		{
-			$GLOBALS['ilLog']->write(__METHOD__.': Nothing to do for course role tutor');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('Nothing todo for course role tutor');
 			return TRUE;
 		}
 		
@@ -178,7 +174,9 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 				$role_title = ilObject::_lookupTitle($role_id);
 				if(substr($role_title, 0, 8) == 'il_grp_m')
 				{
-					$GLOBALS['ilLog']->write(__METHOD__.': Assigning user '.$a_parameter['usr_id'].' to group ' . ilObject::_lookupTitle($node['obj_id']));
+					ilLoggerFactory::getLogger('fhoevevent')->info('Assigning user ' . $a_parameter['usr_id'].' to group '.
+						ilObject::_lookupTitle($node['obj_id'])
+					);
 					$GLOBALS['rbacadmin']->assignUser($role_id, $a_parameter['usr_id']);
 				}
 			}
@@ -207,15 +205,20 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		}
 	}
 
+	/**
+	 * Group assignmnents
+	 * @param type $a_parameter
+	 * @return boolean
+	 */
 	protected function handleGroupAssignMember($a_parameter)
 	{
-		$GLOBALS['ilLog']->write(__METHOD__.': Listening to event add participant from group!');
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Listening to event add participant from group!');
 		$ref_id = $this->lookupRefId($a_parameter['obj_id']);
 		
 		$parent_course_ref = $GLOBALS['tree']->checkForParentType($ref_id,'crs');
 		if(!$parent_course_ref)
 		{
-			$GLOBALS['ilLog']->write('No parent course found => nothing to do!');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('No parent course found.');
 			return FALSE;
 		}
 		
@@ -223,59 +226,73 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		{
 			return FALSE;
 		}
-
+		
+		include_once './Modules/Course/classes/class.ilCourseParticipant.php';
+		$part = ilCourseParticipant::_getInstanceByObjId(ilObject::_lookupObjId($parent_course_ref), $a_parameter['usr_id']);
+		if($part->isParticipant())
+		{
+			ilLoggerFactory::getLogger('fhoevevent')->debug('User is already assigned to main course.');
+			return false;
+		}
+		
+		// Assign to dtpl local role
 		foreach($GLOBALS['rbacreview']->getRolesOfObject($parent_course_ref,TRUE) as $role_id)
 		{
 			// assign as course member
 			$role_title = ilObject::_lookupTitle($role_id);
-			if(substr($role_title, 0, 8 ) == 'il_crs_m')
+			if(substr($role_title, 0, 4 ) == 'DTPL')
 			{
 				if(!$GLOBALS['rbacreview']->isAssigned($a_parameter['usr_id'], $role_id))
 				{
 					$GLOBALS['rbacadmin']->assignUser($role_id, $a_parameter['usr_id']);
-					$GLOBALS['ilLog']->write(__METHOD__.': Assigning user '.$a_parameter['usr_id'].
-							' to course ' . ilObject::_lookupTitle(ilObject::_lookupObjId($parent_course_ref, TRUE)));
+					
+					ilLoggerFactory::getLogger('fhoevevent')->info('Assigning user ' . $a_parameter['usr_id'] . 
+						'to course '. ilObject::_lookupTitle(ilObject::_lookupObjId($parent_course_ref, true))
+					);
 				}
 			}
 		}
 	}
 	
+	/**
+	 * Handle group deassign member
+	 * @param array $a_parameter
+	 */
 	protected function handleGroupDeassignMember($a_parameter)
 	{
-		$GLOBALS['ilLog']->write(__METHOD__.': Listening to event delete participant from group! Nothing to do.');
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Listening to event delete participant from group! Nothing todo.');
 	}
 	
 
 	/**
 	 * check if course is of type main course
-	 * @param type $a_parameter
+	 * @param int ref_id
 	 * @return boolean
 	 */
 	protected function isMainCourse($a_course_ref_id)
 	{
 		if(!ilFhoevEventSettings::getInstance()->isActive())
 		{
-			$GLOBALS['ilLog']->write(__METHOD__.': Plugin deactivated');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('Plugin deactivated');
 		}
 		$dtpl = ilFhoevEventSettings::getInstance()->getTemplateId();
 		if(!$dtpl)
 		{
-			$GLOBALS['ilLog']->write(__METHOD__.': No template id given');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('no templated id given');
 		}
 		
 		include_once './Services/DidacticTemplate/classes/class.ilDidacticTemplateObjSettings.php';
 		
 		$current_dtpl_id = ilDidacticTemplateObjSettings::lookupTemplateId($a_course_ref_id);
-		$GLOBALS['ilLog']->write(__METHOD__.': Current dtpl id is ' . $current_dtpl_id);
-		$GLOBALS['ilLog']->write(__METHOD__.': Current dtpl is ' . $dtpl);
-		$GLOBALS['ilLog']->write(__METHOD__.': Current ref_id ' . $a_course_ref_id);
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Current dtpl id is: ' . $current_dtpl_id);
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Current dtpl is: ' . $dtpl);
+		ilLoggerFactory::getLogger('fhoevevent')->debug('Current ref_id is: ' . $a_course_ref_id);
 		if($current_dtpl_id != $dtpl)
 		{
-			$GLOBALS['ilLog']->write(__METHOD__.': Not main course');
+			ilLoggerFactory::getLogger('fhoevevent')->debug('Not main course');
 			return FALSE;
 		}
-		
-		$GLOBALS['ilLog']->write(__METHOD__.': ... is main course');
+		ilLoggerFactory::getLogger('fhoevevent')->debug('... is main course');
 		return TRUE;
 	}
 
