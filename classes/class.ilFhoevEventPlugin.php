@@ -242,6 +242,7 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 			$role_title = ilObject::_lookupTitle($role_id);
 			if(substr($role_title, 0, 4 ) == 'DTPL')
 			{
+				$GLOBALS['rbacreview']->clearCaches();
 				if(!$GLOBALS['rbacreview']->isAssigned($a_parameter['usr_id'], $role_id))
 				{
 					$GLOBALS['rbacadmin']->assignUser($role_id, $a_parameter['usr_id']);
