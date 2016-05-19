@@ -240,7 +240,7 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		{
 			// assign as course member
 			$role_title = ilObject::_lookupTitle($role_id);
-			if(substr($role_title, 0, 4 ) == 'DTPL')
+			if(substr($role_title, 0, 7 ) !== 'il_crs_')
 			{
 				$GLOBALS['rbacreview']->clearCaches();
 				if(!$GLOBALS['rbacreview']->isAssigned($a_parameter['usr_id'], $role_id))
