@@ -135,9 +135,19 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		
 		// now assign all members of the parent course to the new group
 		include_once './Modules/Course/classes/class.ilCourseParticipants.php';
+		/**
+		 * @var ilCouseParticipants
+		 */
 		$part = ilCourseParticipants::getInstanceByObjId(ilObject::_lookupObjectId($parent_id));
+		$default_member_role = $part->getDefaultMemberRole($parent_id);
 		foreach($part->getMembers() as $member_id)
 		{
+			// check for real member role otherwise do not assign user
+			if(!$GLOBALS['rbacreview']->isAssigned($member_id, $default_member_role))
+			{
+				continue;
+			}
+			
 			// do not assign user if he/she is admin or tutor
 			if($part->isAdmin($member_id) || $part->isTutor($member_id))
 			{
@@ -240,6 +250,7 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		{
 			// assign as course member
 			$role_title = ilObject::_lookupTitle($role_id);
+			ilLoggerFactory::getLogger('crs')->debug('Validating stammkurs role: ' . $role_title);
 			if(substr($role_title, 0, 7 ) !== 'il_crs_')
 			{
 				$GLOBALS['rbacreview']->clearCaches();
