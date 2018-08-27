@@ -135,10 +135,11 @@ class ilFhoevEventPlugin extends ilEventHookPlugin
 		
 		// now assign all members of the parent course to the new group
 		include_once './Modules/Course/classes/class.ilCourseParticipants.php';
+
 		/**
 		 * @var ilCouseParticipants
 		 */
-		$part = ilCourseParticipants::getInstanceByObjId(ilObject::_lookupObjectId($parent_id));
+		$part = ilParticipants::getInstance($parent_id);
 		$default_member_role = $part->getDefaultMemberRole($parent_id);
 		foreach($part->getMembers() as $member_id)
 		{
